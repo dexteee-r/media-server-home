@@ -1,0 +1,22 @@
+version: "3.9"
+
+networks:
+  media-net:
+    driver: bridge
+
+volumes:
+  traefik-certs:
+  immich-postgres:
+  prometheus-data:
+  grafana-data:
+
+services:
+  traefik:
+    image: traefik:v3.0
+    container_name: traefik
+    restart: unless-stopped
+    networks:
+      - media-net
+    ports:
+      - "80:80"
+      - "443:443"

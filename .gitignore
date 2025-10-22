@@ -1,0 +1,42 @@
+# Environment
+.env
+.env.local
+*.env.backup
+
+# Docker
+docker-compose.override.yml
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+
+# IDE
+.vscode/
+.idea/
+
+# Backups
+backups/
+*.sql
+*.dump
+*.tar.gz
+
+# Secrets
+secrets/
+*.key
+*.pem
+
+# Temp
+tmp/
+*.tmp
+
+# Node
+node_modules/
+
+# Python
+__pycache__/
+.venv/
