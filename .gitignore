@@ -40,3 +40,7 @@ node_modules/
 # Python
 __pycache__/
 .venv/
+
+
+photoconfig/
+ 
