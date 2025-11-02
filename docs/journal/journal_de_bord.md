@@ -101,3 +101,32 @@ Prochaines étapes :
 - Scripts backup/restore automatisés
 - Configuration WiFi permanente (post-Ethernet)
 
+
+## **Journal de bord – 02/11/2025**
+
+* Mise à jour : VM → Debian 13, VPN → OpenVPN, Reverse Proxy → Nginx Proxy Manager.
+* Impact : ajustement mineur des configurations réseau et des conteneurs Docker.
+* ajout de docker dans la vm debian 
+* ajout de ufw 
+* achat d'un domain elmzn.be chez ovh cloud 
+* mis en place de dns dynamic chez ovh cloud
+* ajout ddclient dans debian  
+* ajout domain intranet.elmzn.be pour le reseaux intra
+* Passage en multi-VM : VM-EXTRANET (NPM, OpenVPN) / VM-INTRANET (Jellyfin, Immich, DB, Monitoring, Backups).
+* Mises à jour : ARCHITECTURE.md, SECURITY.md, infra/proxmox/, infra/vm/, OPERATIONS.md, ADR-005/006 (impacts).
+*Motif : réduire la surface d’attaque, isoler les données, simplifier la restauration.
+*Prochaines actions : mettre à jour les docs listées ci-dessus, puis transmettre le lot à l’IA DEV.
+* **Mise à jour :** passage en **multi-VM** avec **EXTRANET (NPM/OpenVPN)** et * **INTRANET (Jellyfin/Immich/DB/Monitoring/Restic)**.
+* **Actions doc :** `ARCHITECTURE.md` enrichi (schéma + flux), SECURITY/OPERATIONS à aligner, ADR-007/008 ajoutés.
+
+* Création de la VM-INTRANET documentée.
+* Contient les services Jellyfin, Immich, Postgres, Prometheus, Grafana, Restic.
+* Flux entrants limités à la VM-EXTRANET.
+* Sauvegardes quotidiennes Restic et snapshots ZFS automatiques.
+
+* Création de la VM-EXTRANET documentée.
+* Contient NPM, OpenVPN, node_exporter, UFW + Fail2ban.
+* Flux restreints vers INTRANET (HTTPS et metrics).
+* Aucune donnée critique locale. Sauvegardes hebdomadaires via Restic (INTRANET).
+  
+

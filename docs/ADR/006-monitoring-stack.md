@@ -2,40 +2,33 @@
 
 ## 📘 Contexte
 
-Le projet **media-server-home** fonctionne sur un hôte **Proxmox VE** avec une **VM “Services” (Ubuntu Server 24.04)** exécutant l’ensemble des conteneurs Docker :  
-- Jellyfin  
-- Immich (+ Postgres)  
-- Traefik  
-- Restic  
-- Prometheus / Grafana (monitoring)
+Le projet **media-server-home** fonctionne sur un hôte **Proxmox VE** avec deux VMs Debian 12 :
 
-L’objectif est de mettre en place une **supervision complète** du système et des services, permettant de :
-- surveiller la charge CPU, la RAM, le stockage et la température,  
-- détecter les pannes ou comportements anormaux (Docker, réseau, backup),  
-- visualiser les métriques en temps réel via un tableau de bord web,  
-- centraliser les alertes et logs.
+- **VM-EXTRANET (DMZ)** : héberge les services exposés (Nginx Proxy Manager, OpenVPN, node_exporter).  
+- **VM-INTRANET (LAN)** : héberge les services internes (Jellyfin, Immich, Postgres, Prometheus, Grafana, Restic).
+
+L’objectif du monitoring est de disposer d’une **vision centralisée** de l’état du système, des conteneurs, du stockage et des sauvegardes.
 
 ---
 
 ## ⚙️ Problème à résoudre
 
-Choisir une **stack de monitoring fiable, légère et intégrée** à l’écosystème Docker / Linux, capable de :
-1. S’exécuter dans la VM sans impact notable sur les performances.  
-2. Être compatible avec **ZFS**, **Docker**, et **Traefik**.  
-3. Exporter des métriques système, conteneurs et disques.  
-4. Permettre une visualisation claire et personnalisable.  
-5. Pouvoir évoluer vers l’envoi d’alertes (mail, Discord, etc.).
+Choisir une stack de monitoring **légère, standard et extensible**, capable de :
+- collecter les métriques des deux VMs (EXTRANET et INTRANET) ;
+- suivre l’état du pool ZFS, des conteneurs Docker et des sauvegardes Restic ;
+- fournir des alertes et tableaux de bord personnalisés ;
+- s’intégrer sans surcharge à la stack Docker existante.
 
 ---
 
 ## 🧩 Options étudiées
 
-| Option | Description | Avantages | Inconvénients |
-|--------|--------------|------------|----------------|
-| **Prometheus + Grafana** | Stack standard open-source pour la collecte et la visualisation des métriques. | - Très mature et documentée<br>- Nombreux exporters disponibles<br>- Intégration Docker / Traefik native<br>- Dashboards Grafana réutilisables<br>- Faible empreinte mémoire (~300–400 Mo)<br>- Compatible avec alerting et Promtail | - Configuration initiale manuelle (targets, dashboards)<br>- Nécessite plusieurs conteneurs |
-| **Netdata** | Monitoring en temps réel tout-en-un. | - Installation simple, UI immédiate<br>- Découverte automatique des métriques | - Consomme plus de RAM (~1 Go)<br>- Moins modulaire, dépendance agent local |
-| **Zabbix** | Solution complète entreprise. | - Interface complète, agents multiples | - Surcharge importante, trop complexe pour un usage domestique |
-| **Glances + InfluxDB** | Outil Python + base time-series. | - Léger et minimaliste | - Moins complet (pas de dashboards, alerting limité) |
+| Stack | Avantages | Inconvénients |
+|--------|------------|----------------|
+| **Prometheus + Grafana** | - Stack standard DevOps<br>- Exporters nombreux (ZFS, Docker, OpenVPN, etc.)<br>- Intégration Docker native<br>- Faible empreinte mémoire | - Configuration manuelle initiale |
+| **Netdata** | Installation simple, UI instantanée | Consomme davantage (~1 Go RAM) |
+| **Zabbix** | Interface complète entreprise | Trop lourd pour une infra domestique |
+| **Glances + InfluxDB** | Léger, minimaliste | Peu de personnalisation, pas d’alerting |
 
 ---
 
@@ -43,15 +36,14 @@ Choisir une **stack de monitoring fiable, légère et intégrée** à l’écosy
 
 | Critère | Pondération | Prometheus + Grafana | Netdata | Zabbix | Glances |
 |----------|--------------|----------------------|----------|---------|----------|
-| **Compatibilité Docker / Linux** | 5 | ✅ Native | ✅ | ⚠️ | ✅ |
-| **Exporters disponibles (ZFS, Docker, CPU)** | 5 | ✅ Très nombreux | ⚠️ | ✅ | ⚠️ |
-| **Personnalisation des dashboards** | 4 | ✅ Totale | ⚠️ Limitée | ✅ | ⚠️ |
-| **Alertes & notifications** | 4 | ✅ Alertmanager intégré | ⚠️ Basique | ✅ | ❌ |
-| **Performance / empreinte mémoire** | 4 | ✅ Modérée (~400 Mo) | ⚠️ 1 Go | ⚠️ Lourde | ✅ Légère |
-| **Documentation / communauté** | 3 | ✅ Très vaste | ✅ | ✅ | ⚠️ |
-| **Intégration avec Traefik / Restic / Docker** | 3 | ✅ Native (exporters & labels) | ⚠️ Partielle | ⚠️ | ❌ |
-| **Évolutivité / longévité** | 3 | ✅ Standard DevOps | ⚠️ | ✅ | ⚠️ |
-| **Score total (/31)** | — | **29 / 31** | 24 / 31 | 22 / 31 | 19 / 31 |
+| **Compatibilité Docker / Linux** | 5 | ✅ | ✅ | ⚠️ | ✅ |
+| **Exporters disponibles** | 5 | ✅ Très nombreux | ⚠️ Limités | ✅ | ⚠️ |
+| **Personnalisation dashboards** | 4 | ✅ | ⚠️ | ✅ | ⚠️ |
+| **Alerting & notifications** | 4 | ✅ | ⚠️ | ✅ | ❌ |
+| **Performance / empreinte mémoire** | 4 | ✅ ~400 Mo | ⚠️ ~1 Go | ⚠️ | ✅ |
+| **Documentation / communauté** | 3 | ✅ Large | ✅ | ✅ | ⚠️ |
+| **Évolutivité / longévité** | 3 | ✅ | ⚠️ | ✅ | ⚠️ |
+| **Score total (/28)** | — | **27 / 28** | 22 | 23 | 19 |
 
 ---
 
@@ -60,18 +52,10 @@ Choisir une **stack de monitoring fiable, légère et intégrée** à l’écosy
 > **Adopté : Prometheus + Grafana** comme stack de monitoring principale.
 
 ### Justification
-
-- Stack **standard du monde DevOps**, stable et extensible.  
-- **Intégration native avec Docker et Traefik** (metrics endpoint).  
-- Permet la supervision des conteneurs, du CPU, de la RAM, du stockage ZFS, et du réseau.  
-- Dashboards Grafana importables / versionnables dans `/configs/grafana/dashboards/`.  
-- Support de l’**alerting** et des **exports vers Grafana Cloud / Discord / email**.  
-- Compatible avec les exporters suivants :  
-  - `node_exporter` → VM (CPU, RAM, disques)  
-  - `cadvisor` → conteneurs Docker  
-  - `smartctl_exporter` → disques physiques  
-  - `traefik` → reverse proxy metrics  
-  - `restic_exporter` (facultatif) → état des sauvegardes  
+- Stack DevOps standard, compatible Docker & multi-VM.  
+- Exporters variés : ZFS, Docker, OpenVPN, NPM, Restic.  
+- Visualisation centralisée (Grafana) + alerting intégré.  
+- Intégration simple dans la VM-INTRANET, avec cibles (targets) EXTRANET.
 
 ---
 
@@ -79,59 +63,131 @@ Choisir une **stack de monitoring fiable, légère et intégrée** à l’écosy
 
 | Aspect | Impact |
 |---------|--------|
-| **Fichiers à créer** | `/configs/prometheus/prometheus.yml` (targets + scrape intervals)<br>`/configs/grafana/datasources.yml` (Prometheus)<br>`/configs/grafana/dashboards/media-server.json` |
-| **Réseau Docker** | Ajouter le service `prometheus` et `grafana` au réseau `traefik-net`. |
-| **Monitoring hardware (ZFS)** | Activer `smartctl_exporter` dans la VM. |
-| **Sauvegardes** | Export des dashboards Grafana dans `/configs/grafana/dashboards/` pour versioning. |
-| **Logs / observabilité** | Ajout possible de `Promtail` + `Loki` (future extension). |
-| **Performances** | Faible impact sur un i5-6500 (consommation CPU <5 %, RAM <400 Mo). |
+| **Déploiement** | Prometheus et Grafana tournent sur la VM-INTRANET. |
+| **Collecte multi-VM** | Scrape des exporters installés sur EXTRANET et INTRANET. |
+| **Sécurité** | Ports metrics ouverts uniquement à `192.168.x.x` et `10.10.x.x`. |
+| **Dashboards** | Stockés et versionnés dans `/configs/grafana/dashboards/`. |
+| **Alertes** | Option : Alertmanager (mail/Discord) connecté à Prometheus. |
 
 ---
 
-## 🧩 Exemple d’organisation des fichiers
+## 🧩 Multi-VM monitoring
+
+### 🧱 Architecture du monitoring
 
 ```
-configs/
-├─ prometheus/
-│ ├─ prometheus.yml
-│ └─ alerts/
-│ ├─ restic-status.yml
-│ └─ disk-space.yml
-└─ grafana/
-├─ datasources.yml
-└─ dashboards/
-└─ media-server.json
+
++----------------------------------------------------------+
+
+| VM-INTRANET (LAN)                                            |
+| ------------------------------------------------------------ |
+| Prometheus (9090) ← Scrape exporters EXTRANET + INTRANET     |
+| Grafana (3000)  ← Dashboards, alerting, backup Restic        |
+| node_exporter, cadvisor, smartctl_exporter, restic_exporter  |
+| +----------------------------------------------------------+ |
 
 ```
+            ↑                        ↑
+            |                        |
+            |                        |
+```
+
++----------------------+     +----------------------+
+| VM-EXTRANET (DMZ)    |     | VM-INTRANET (local)  |
+|----------------------|     |----------------------|
+| node_exporter (9100) |     | node_exporter (9100) |
+| openvpn_exporter     |     | smartctl_exporter    |
+| npm-exporter (option)|     | cadvisor             |
++----------------------+     +----------------------+
+
+````
 
 ---
 
-## 🔒 Sécurité
+### 🔗 Cibles Prometheus (`prometheus.yml`)
 
-- Grafana exposé uniquement sur le réseau `traefik-net` (accès via Traefik).  
-- Authentification Grafana activée (admin/password via `.env`).  
-- Prometheus en lecture seule (aucune modification externe).  
-- Dashboard “public” en lecture seule possible sur le réseau local.
+```yaml
+scrape_configs:
+  - job_name: 'node_intranet'
+    static_configs:
+      - targets: ['192.168.1.10:9100']
+
+  - job_name: 'node_extranet'
+    static_configs:
+      - targets: ['10.10.0.10:9100']
+
+  - job_name: 'docker'
+    static_configs:
+      - targets: ['192.168.1.10:8080']
+
+  - job_name: 'restic'
+    static_configs:
+      - targets: ['192.168.1.10:9888']
+
+  - job_name: 'openvpn'
+    static_configs:
+      - targets: ['10.10.0.10:9176']
+
+  - job_name: 'npm'
+    static_configs:
+      - targets: ['10.10.0.10:9278'] # Si npm-exporter est activé
+````
+
+> 💡 Les exporters sensibles (OpenVPN, NPM) sont restreints via pare-feu à `192.168.1.10` (Prometheus).
+
+---
+
+### 🔐 Sécurité
+
+| Élément                 | Protection                                                     |
+| ----------------------- | -------------------------------------------------------------- |
+| **Accès Prometheus**    | Limité au LAN (192.168.x.x)                                    |
+| **Accès Grafana**       | HTTPS via NPM                                                  |
+| **Exporters EXTRANET**  | Restreints à IP Prometheus                                     |
+| **Sauvegardes Grafana** | Export JSON des dashboards dans `/configs/grafana/dashboards/` |
+| **Logs / alertes**      | Conservés dans `/mnt/tank/appdata/logs/monitoring`             |
+
+---
+
+### 📊 Dashboards recommandés
+
+| Dashboard            | Source                   | VM concernée |
+| -------------------- | ------------------------ | ------------ |
+| System Overview      | GrafanaLabs ID 1860      | Les deux     |
+| Docker Containers    | GrafanaLabs ID 179       | INTRANET     |
+| ZFS / Disks          | Custom (local)           | INTRANET     |
+| Restic Backup Status | Custom exporter          | INTRANET     |
+| NPM Metrics          | npm-exporter (optionnel) | EXTRANET     |
+| OpenVPN Sessions     | openvpn-exporter         | EXTRANET     |
+
+---
+
+### 🧠 Alerting (optionnel)
+
+* **Alertmanager** déployé sur INTRANET.
+* Alerte si :
+
+  * backup Restic échoue plus de 48h ;
+  * pool ZFS dégradé ;
+  * service Docker down ;
+  * exporter EXTRANET injoignable.
+* Notifications : Discord, email ou Telegram.
 
 ---
 
 ## 🔮 Actions suivantes
 
-- [ ] Créer les fichiers `prometheus.yml` et `datasources.yml`.  
-- [ ] Définir les dashboards principaux : système, Docker, sauvegardes.  
-- [ ] Ajouter un **exporter Restic** ou script custom (état des backups).  
-- [ ] Documenter la supervision dans `/docs/OPERATIONS.md` (procédure de vérification).  
-- [ ] Évaluer extension **Loki / Promtail** pour la centralisation des logs.
+* [ ] Ajouter `openvpn-exporter` et `npm-exporter` sur EXTRANET.
+* [ ] Créer un dashboard "Infrastructure Overview" multi-VM.
+* [ ] Sauvegarder régulièrement la config Grafana (`datasources.yml`, `dashboards/`).
+* [ ] Intégrer alertes Restic et ZFS dans Grafana.
+* [ ] Évaluer extension future vers Grafana Loki (logs centralisés).
 
 ---
 
-🗓️ **Journal de bord Future desicion** 
-- Décision : adoption de **Prometheus + Grafana** comme stack de monitoring.  
-- Raisons : standard DevOps, modularité, faible empreinte, intégration Docker/Traefik.  
-- Étape suivante : compléter **ARCHITECTURE.md** et **SECURITY.md**.
+🗓️ **Journal de bord – 05/11/2025**
 
-### 💡 Résumé pour ton Wiki
-
-ADR-006 — Stack de monitoring : Prometheus + Grafana adoptée.
-Motifs : intégration Docker/Traefik native, dashboards personnalisables, faible empreinte.
-Impact : ajout des fichiers de configuration sous /configs/prometheus/ et /configs/grafana/.
+* Ajout de la section *Multi-VM monitoring*.
+* Prometheus centralisé sur INTRANET.
+* Exporters installés sur les deux VMs.
+* Sécurité des cibles et supervision complète de la stack.

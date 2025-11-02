@@ -31,8 +31,8 @@ Choisir une solution de **sauvegarde incrémentale, chiffrée et automatisable**
 
 | Outil | Avantages | Inconvénients |
 |--------|------------|----------------|
-| **Restic** | - 100 % Go → binaire statique, aucune dépendance.<br>- Sauvegarde incrémentale dédupliquée et **chiffrée** (AES-256).<br>- Support de multiples backends : local, SFTP, SMB, rclone, cloud (Backblaze, AWS, etc.).<br>- Commandes simples (`restic backup`, `restic restore`, `forget`, `prune`).<br>- Bonne intégration dans scripts Bash et Docker. | - Moins efficace que Borg pour très grands ensembles de fichiers non compressibles.<br>- Pas de compression native (seulement chiffrage). |
-| **BorgBackup** | - Très haute déduplication + compression intégrée (zlib/lz4).<br>- Extrêmement efficace sur gros volumes récurrents.<br>- Vérification d’intégrité puissante (`borg check`). | - Nécessite Python et dépendances.<br>- Moins compatible multi-backend (pas de S3 natif sans BorgBase ou rclone).<br>- Moins portable (archives pas autoportantes). |
+| **Restic** | - 100 % Go → binaire statique, aucune dépendance.<br>- Sauvegarde incrémentale dédupliquée et **chiffrée** (AES-256).<br>- Support de multiples backends : local, SFTP, SMB, rclone, cloud.<br>- Commandes simples (`restic backup`, `restic restore`).<br>- Bonne intégration dans scripts Bash et Docker. | - Moins efficace que Borg pour très grands ensembles non compressibles.<br>- Pas de compression native. |
+| **BorgBackup** | - Très haute déduplication + compression intégrée (zlib/lz4).<br>- Vérification d’intégrité puissante (`borg check`). | - Dépendances Python.<br>- Moins compatible multi-backend.<br>- Moins portable. |
 
 ---
 
@@ -43,10 +43,10 @@ Choisir une solution de **sauvegarde incrémentale, chiffrée et automatisable**
 | **Chiffrement intégré** | 5 | ✅ AES-256 natif | ✅ |
 | **Déduplication efficace** | 4 | ✅ Bonne | ✅ Excellente |
 | **Compression** | 3 | ⚠️ Non native | ✅ Intégrée |
-| **Support multi-destination (SFTP / Cloud)** | 5 | ✅ Large (SFTP, SMB, S3, rclone) | ⚠️ Limité |
-| **Intégration Docker / scripts shell** | 4 | ✅ Simple (`restic` CLI) | ⚠️ Plus complexe |
-| **Performances globales (backup/restore)** | 4 | ✅ Très bonnes | ✅ Excellentes |
-| **Maintenance / dépendances** | 3 | ✅ Binaire unique | ⚠️ Dépend de Python |
+| **Support multi-destination (SFTP / Cloud)** | 5 | ✅ Large | ⚠️ Limité |
+| **Intégration Docker / scripts** | 4 | ✅ Simple (`restic` CLI) | ⚠️ Plus complexe |
+| **Performances globales** | 4 | ✅ Très bonnes | ✅ Excellentes |
+| **Maintenance / dépendances** | 3 | ✅ Binaire unique | ⚠️ Python requis |
 | **Restauration sélective** | 3 | ✅ Possible par chemin | ✅ Possible |
 | **Vérification d’intégrité** | 3 | ✅ `restic check` | ✅ `borg check` |
 | **Score total (/34)** | — | **31 / 34** | **29 / 34** |
@@ -64,56 +64,72 @@ Choisir une solution de **sauvegarde incrémentale, chiffrée et automatisable**
 - Compatible avec les **backends locaux et distants** (NAS, USB, S3).  
 - Format d’archive **autoportant** (chaque repo Restic est autonome).  
 - Parfaitement intégré dans un environnement Docker et ZFS (sauvegarde post-snapshot).  
-- Pas de dépendances Python → déploiement facile sur VM Ubuntu.
+- Pas de dépendances Python → déploiement facile sur VM Debian.
 
 ---
 
-## 🔁 Conséquences & impacts
+## 🧩 Multi-VM adaptation (Intranet / Extranet)
 
-| Aspect | Impact |
-|---------|--------|
-| **Scripts** | Création de `/scripts/backup.sh` et `/scripts/restore.sh` avec variables (`RESTIC_REPOSITORY`, `RESTIC_PASSWORD_FILE`). |
-| **Planification** | Cron job journalier (ex: `0 3 * * * /scripts/backup.sh`). |
-| **Structure du dépôt** | Ajout du fichier `.env.example` avec variables Restic. |
-| **Stockage** | Repo local par défaut : `/mnt/tank/backups/restic-repo`. |
-| **Sauvegarde distante** | Optionnelle : via `restic -r sftp:user@nas:/backups`. |
-| **Surveillance** | Logs redirigés vers `/var/log/restic.log` + dashboard Grafana (export Promtail). |
-| **Restauration** | Procédure documentée dans `/docs/OPERATIONS.md`. |
+Avec la séparation du projet en deux VMs (ADR-007), la stratégie Restic est adaptée de la manière suivante :
+
+### 🧱 Organisation des dépôts Restic
+
+| VM | Cible | Répertoire | Contenu sauvegardé |
+|----|--------|-------------|--------------------|
+| **INTRANET** | Local (ZFS) | `/mnt/tank/backups/restic-repo/` | Appdata Docker, bases de données, médias, configs |
+| **EXTRANET** | Distant (SFTP vers INTRANET) | `/mnt/tank/backups/extranet/` | NPM configs, certificats SSL, clés OpenVPN |
+
+### 🔁 Règle de restauration
+
+1️⃣ **Restaurer la VM-EXTRANET** (proxy & VPN) — pour retrouver l’accès distant et le réseau HTTPS.  
+2️⃣ **Restaurer ensuite la VM-INTRANET** (backends et données).  
+
+Les snapshots ZFS sont restaurés avant le déclenchement de `restic restore`.
+
+### 🔐 Sécurité des sauvegardes
+- Chaque dépôt possède son propre mot de passe (`/etc/restic/passwd` sur chaque VM).  
+- Les backups sont **chiffrés AES-256** et transférés via **SSH (SFTP)**.  
+- Les répertoires `/mnt/tank/backups/` ont des permissions `700` (root uniquement).  
+- Aucune clé VPN n’est stockée sur l’INTRANET sans chiffrement.
+
+### 🕓 Fréquences
+
+| Type | VM concernée | Fréquence |
+|------|---------------|------------|
+| Appdata / bases | INTRANET | Quotidienne |
+| Médias / photos | INTRANET | Hebdomadaire |
+| Configs NPM / VPN | EXTRANET | Hebdomadaire |
+| Vérif intégrité (`restic check`) | INTRANET | Mensuelle |
+| Tests de restauration | INTRANET | Mensuelle |
+
+### 🔄 Automatisation
+- `backup.sh` et `restore.sh` adaptés par VM (`--repo` spécifique).  
+- Cron jobs distincts :  
+  - `0 3 * * *` → backup INTRANET  
+  - `0 4 * * 7` → backup EXTRANET  
+- Logs centralisés sur INTRANET pour supervision (Grafana/Prometheus).
 
 ---
-
-## 🧩 Exemple de configuration (env)
-
-```bash
-# .env.example
-RESTIC_REPOSITORY=/mnt/tank/backups/restic-repo
-RESTIC_PASSWORD_FILE=/etc/restic/passwd
-RESTIC_RETENTION="--keep-daily 7 --keep-weekly 4 --keep-monthly 3"
-```
 
 ## 🔒 Sécurité
-- Le mot de passe Restic est stocké dans un fichier sécurisé (/etc/restic/passwd, chmod 600).
-- Les sauvegardes sont chiffrées côté client avant écriture sur disque ou NAS.
+
+- Le mot de passe Restic est stocké dans un fichier sécurisé (`/etc/restic/passwd`, chmod 600).  
+- Les sauvegardes sont **chiffrées côté client** avant écriture sur disque ou NAS.  
 - Les dumps Postgres/SQLite des services sont inclus dans la sauvegarde avant exécution.
 
+---
 
 ## 🔮 Actions suivantes
 
-- Créer /scripts/backup.sh et /scripts/restore.sh.
-- Ajouter le plan de rétention dans /docs/OPERATIONS.md.
-- Tester une restauration complète sur dataset temporaire.
-- Préparer ADR-006 — Monitoring (Prometheus + Grafana) pour surveiller la santé et les sauvegardes.
+- [ ] Créer `/scripts/backup-intranet.sh` et `/scripts/backup-extranet.sh`.  
+- [ ] Ajouter le plan de rétention dans `/docs/OPERATIONS.md`.  
+- [ ] Tester la restauration sur datasets ZFS temporaires.  
+- [ ] Mettre à jour Prometheus pour inclure `restic_exporter` (INTRANET).  
 
+---
 
-### 💡 Résumé pour ton Wiki
-
-**ADR-005 — Sauvegarde : Restic adopté.**  
-Motifs : simplicité, chiffrement natif, intégration Docker, multi-backend (local + NAS + S3).  
-Impact : scripts `/scripts/backup.sh` et `/scripts/restore.sh`, repo local `/mnt/tank/backups/restic-repo`.
-
-
-🗓️ **Journal de bord Future desicion**
-
-- Décision : adoption de Restic comme outil de sauvegarde.
-- Raisons : simplicité, chiffrement intégré, compatibilité Docker & multi-backend.
-- Étape suivante : documentation de la stack de monitoring (ADR-006).
+🗓️ **Journal de bord – 02/11/2025**  
+- Mise à jour : ajout de la section “Multi-VM adaptation”.  
+- Deux dépôts Restic indépendants (INTRANET / EXTRANET).  
+- Sauvegardes chiffrées AES-256, automatisées et supervisées.  
+- Procédures cohérentes avec ADR-007/008 et OPERATIONS.md.

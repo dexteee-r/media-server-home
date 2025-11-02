@@ -1,49 +1,50 @@
-# Security Policy
-
 # 🔒 Politique de sécurité — Projet *media-server-home*
 
 ## 📘 Contexte général
 
 Le projet **media-server-home** est un **serveur multimédia auto-hébergé** (photos & vidéos), déployé sur un hôte **Proxmox VE 8** avec :
-- une **VM “Services” (Ubuntu Server 24.04)** ;
-- des **conteneurs Docker** : Jellyfin, Immich, Traefik, Postgres, Prometheus, Grafana, Restic, etc. ;
-- un **système de fichiers ZFS** (datasets `media`, `photos`, `appdata`, `backups`).
+- une **VM-EXTRANET (Debian 12)** dédiée au proxy et VPN ;
+- une **VM-INTRANET (Debian 12)** hébergeant les backends et données ;
+- un **pool ZFS** sur l’hôte pour le stockage (`media`, `photos`, `appdata`, `backups`).
 
-Les objectifs principaux de la sécurité sont :
+Les objectifs principaux :
 1. Protéger les **données personnelles** et fichiers multimédias.  
-2. Sécuriser l’accès à l’interface web et aux services.  
-3. Prévenir les pertes de données via **sauvegardes chiffrées**.  
-4. Garantir un **accès distant privé** et un **réseau interne isolé**.
+2. Sécuriser l’accès aux services internes via une **DMZ (EXTRANET)**.  
+3. Prévenir la perte de données grâce à des **sauvegardes chiffrées et testées**.  
+4. Garantir un **accès distant privé et chiffré** via VPN (OpenVPN).
 
 ---
 
 ## 🧱 Architecture de sécurité
 
 ```
-+-------------------------+
-| Proxmox VE (Hôte) |
-| - ZFS (tank) |
-| - Firewall Proxmox |
-+-----------+-------------+
-|
-Bridge vmbr0
-|
-+--------------------+
-| VM "Services" |
-| Ubuntu 24.04 LTS |
-| Docker + Compose |
-+--------------------+
-| traefik-net (LAN)
-|_______________________
-Jellyfin / Immich / Grafana
-↳ HTTPS only (Traefik)
-↳ Authentification
-↳ Logs + monitoring
+
++-----------------------------+
+
+| Proxmox VE                      |
+| ------------------------------- |
+| - ZFS (tank)                    |
+| - Firewall Proxmox              |
+| +-----------+-----------------+ |
 
 ```
+        |
+   Bridges réseau :
+   vmbr0 → LAN (INTRANET)
+   vmbr1 → DMZ (EXTRANET)
+        |
+```
 
----
++-------------------+      +-------------------+
+| VM-INTRANET       |      | VM-EXTRANET       |
+| Debian 12         |      | Debian 12         |
+| - Jellyfin        |      | - Nginx Proxy Mgr |
+| - Immich + DB     |<---->| - OpenVPN         |
+| - Prometheus/Graf.|      | - node_exporter   |
+| - Restic          |      |                   |
++-------------------+      +-------------------+
 
+```
 
 ---
 
@@ -52,22 +53,23 @@ Jellyfin / Immich / Grafana
 ### Comptes système
 - Accès SSH uniquement via **clé publique** (`~/.ssh/authorized_keys`).
 - Port SSH personnalisé (≠ 22) et protégé par **Fail2ban**.
-- Interdiction de connexion root directe (`PermitRootLogin no`).
-- Utilisateur administrateur dédié (`media-admin`).
+- Interdiction de connexion root (`PermitRootLogin no`).
+- Utilisateur administrateur : `media-admin`.
 
 ### Services applicatifs
-| Service | Méthode d’authentification | Protection |
-|----------|-----------------------------|-------------|
-| **Traefik Dashboard** | BasicAuth (mot de passe fort, fichier `.htpasswd`) | HTTPS + accès LAN uniquement |
-| **Jellyfin** | Compte admin + comptes utilisateurs | Mots de passe forts, gestion locale |
-| **Immich** | Authentification interne (email + mot de passe) | Pas d’accès public direct |
-| **Grafana** | Admin/password dans `.env`, changé à la première connexion | HTTPS obligatoire |
+| Service | VM | Authentification | Protection |
+|----------|----|------------------|-------------|
+| **Nginx Proxy Manager** | EXTRANET | Interface web protégée (admin/password fort) | HTTPS + accès LAN/VPN |
+| **Jellyfin** | INTRANET | Compte admin + comptes locaux | Accessible via proxy |
+| **Immich** | INTRANET | Auth interne (email + mot de passe) | Non exposé directement |
+| **Grafana** | INTRANET | Admin/password dans `.env`, changé au premier login | HTTPS via proxy |
+| **Prometheus** | INTRANET | Aucune modif possible à distance | Accès LAN/VPN uniquement |
 
 ### VPN / Accès distant
-- Utilisation de **Tailscale** pour un accès privé au réseau domestique :
-  - Pas d’exposition de ports publics.  
-  - Connexions chiffrées (WireGuard-based).  
-  - Accès restreint aux membres autorisés du réseau Tailscale.
+- Accès distant via **OpenVPN** (hébergé sur la VM-EXTRANET).
+- Chiffrement : **AES-256-CBC** + clé DH 4096 bits.  
+- Les fichiers clients `.ovpn` sont générés manuellement et distribués de façon sécurisée.
+- Aucun autre port public n’est exposé.
 
 ---
 
@@ -75,12 +77,27 @@ Jellyfin / Immich / Grafana
 
 | Élément | Sécurisation appliquée |
 |----------|------------------------|
-| **Bridge `vmbr0` (Proxmox)** | Réseau LAN interne, pas de passerelle vers Internet par défaut |
-| **VM “Services”** | Pare-feu Ubuntu activé (`ufw allow 22,80,443`), logs activés |
-| **Réseau Docker** | `traefik-net` : bridge isolé pour les services web |
-| **Traefik** | Reverse proxy unique, HTTPS sur tout le trafic interne |
-| **Ports exposés** | 22 (SSH, restreint), 80/443 (Traefik), 9100 (Prometheus exporter, LAN only) |
-| **DNS interne** | `*.home.arpa` — noms internes non résolus à l’extérieur |
+| **Bridge `vmbr0` (INTRANET)** | Réseau LAN privé, isolé de l’extérieur |
+| **Bridge `vmbr1` (EXTRANET)** | Réseau DMZ pour NPM & VPN |
+| **Proxmox Firewall** | Activé au niveau Datacenter + VM |
+| **UFW (chaque VM)** | Politique `deny incoming` + autorisations spécifiques |
+| **DNS interne** | `*.home.arpa` — non résolu à l’extérieur |
+
+### 🔐 Segmentation réseau
+
+| Zone | VM | Services | Rôle |
+|------|----|-----------|------|
+| **EXTRANET (DMZ)** | `vm-extranet` | NPM, OpenVPN | Point d’entrée unique |
+| **INTRANET (LAN)** | `vm-intranet` | Jellyfin, Immich, Postgres, Grafana, Prometheus, Restic | Données et services internes |
+
+### 🔁 Flux autorisés
+
+| Source → Cible | Ports | Description |
+|----------------|-------|-------------|
+| **Clients LAN → EXTRANET** | 443/TCP, 1194/UDP | HTTPS + VPN |
+| **EXTRANET → INTRANET** | 8096, 2283, 3001, 9090, 3000 | Proxy + supervision |
+| **INTRANET → EXTRANET** | 443 (ACME certs), 9100 (metrics) | Sortants contrôlés |
+| **INTRANET ↔ Internet** | Sortants uniquement | MàJ système & Docker |
 
 ---
 
@@ -88,107 +105,92 @@ Jellyfin / Immich / Grafana
 
 | Domaine | Mesure de sécurité |
 |----------|--------------------|
-| **Transport** | HTTPS obligatoire (certificats Let’s Encrypt ou self-signed via Traefik). |
-| **Sauvegardes** | Chiffrement AES-256 via **Restic** avant écriture sur disque ou NAS. |
-| **Repos (at rest)** | ZFS utilisé avec intégrité et auto-réparation. |
-| **Accès distant** | Tunnel VPN chiffré (Tailscale). |
-| **Mots de passe & secrets** | Stockés dans `.env` (jamais commités) + `/etc/restic/passwd` (chmod 600). |
+| **Transport** | HTTPS (Let’s Encrypt via NPM) + VPN OpenVPN AES-256 |
+| **Sauvegardes** | Restic AES-256 avant envoi sur disque ou NAS |
+| **Stockage** | ZFS avec vérification d’intégrité + snapshots automatiques |
+| **Secrets** | `.env` (non versionné) + `/etc/restic/passwd` (chmod 600) |
+| **Accès distant** | Exclusivement via OpenVPN (aucun port public direct) |
 
 ---
 
-## 🧩 4. Sauvegardes et restauration sécurisée
+## 🧩 4. Sauvegardes et restauration
 
-### Sauvegarde
-- Outil : **Restic** (`ADR-005`).
-- Répertoires protégés :
-  - `/mnt/tank/appdata` → configurations des services.
-  - `/mnt/tank/media` → fichiers vidéos.
-  - `/mnt/tank/photos` → bibliothèques Immich.
-- Sauvegarde locale : `/mnt/tank/backups/restic-repo/`.
-- Sauvegarde externe : disque USB (monté ponctuellement) ou NAS distant via `sftp`.
-- Fréquence :
-  - Quotidienne pour `appdata` et bases de données.
-  - Hebdomadaire pour `media` et `photos`.
+### Multi-VM
+- **INTRANET** → sauvegarde complète via Restic :
+  - `/mnt/tank/media`, `/mnt/tank/photos`, `/mnt/tank/appdata`, `/mnt/tank/backups`
+- **EXTRANET** → sauvegarde légère (NPM config, OpenVPN keys)
+- **Priorité de restauration** :  
+  1️⃣ EXTRANET (proxy + VPN)  
+  2️⃣ INTRANET (services internes + données)
 
-### Restauration
-- Tests mensuels de restauration dans un dataset temporaire `tank/test-restore`.
-- Commandes documentées dans `/docs/OPERATIONS.md`.
+### Fréquence
+| Type | Fréquence | Outil |
+|------|------------|-------|
+| Configs + bases de données | Quotidienne | Restic |
+| Médias & photos | Hebdomadaire | Restic |
+| Snapshots ZFS | Quotidien / Hebdomadaire | ZFS auto-snapshot |
+| Tests de restauration | Mensuel | `restic restore` dans dataset test |
 
 ---
 
 ## 🧠 5. Mises à jour et durcissement
 
-### Mises à jour
-- **Watchtower** pour mise à jour automatique des conteneurs Docker.
-- Mises à jour système via `apt upgrade` hebdomadaire.
-- Vérification mensuelle des images obsolètes (`docker image prune -a`).
-
-### Durcissement
-| Composant | Mesures appliquées |
-|------------|--------------------|
-| **Ubuntu** | UFW, fail2ban, désactivation SSH root |
-| **Docker** | Userspace rootless non nécessaire (réseau interne isolé) |
-| **Proxmox** | Mises à jour régulières, utilisateurs limités, backups chiffrés |
-| **Traefik** | HTTPS enforced, middlewares Security Headers + Rate Limit |
-| **ZFS** | Snapshots automatiques (quotidiens/hebdomadaires) |
-| **Restic** | Suppression automatique des anciennes sauvegardes (`forget --prune`) |
+| Composant | Mesures |
+|------------|----------|
+| **Debian** | `apt upgrade` hebdomadaire, `unattended-upgrades` actif |
+| **Docker / Compose** | MàJ via Watchtower |
+| **Proxmox** | Firewall actif, accès root restreint |
+| **Nginx Proxy Manager** | Certificats Let’s Encrypt auto-renouvelés |
+| **OpenVPN** | Rotation mensuelle des certificats |
+| **ZFS** | Scrub mensuel (`zpool scrub tank`) |
+| **Restic** | Rotation automatique (`forget --prune`) |
 
 ---
 
 ## 🧩 6. Supervision et audit
 
-| Élément | Contrôle appliqué |
-|----------|------------------|
-| **Prometheus + Grafana** | Surveille CPU, RAM, stockage, réseau, Restic |
-| **Alertes Restic** | Échec de backup → alerte Grafana ou e-mail |
-| **Logs centralisés** | `/var/log/docker/` + `Promtail` (future extension) |
-| **Audit mensuel** | Vérification des snapshots, taille disques, journaux |
+| Élément | Contrôle |
+|----------|----------|
+| **Prometheus + Grafana** | Collecte métriques INTRANET + EXTRANET |
+| **node_exporter (EXTRANET)** | Scrapé par Prometheus (port 9100) |
+| **Logs NPM / VPN** | Centralisés et sauvegardés hebdomadairement |
+| **Alertes** | Échec de backup → alerte Grafana |
+| **Audit mensuel** | Vérification snapshots ZFS + restauration Restic |
 
 ---
 
 ## 🧾 7. Plan de réponse aux incidents
 
-| Scénario | Mesure immédiate | Action à long terme |
-|-----------|------------------|----------------------|
-| Panne disque | Restaurer depuis sauvegarde Restic | Remplacer le disque et reconstruire le pool ZFS |
-| Corruption de config Docker | Restaurer `/appdata` depuis snapshot ZFS | Automatiser sauvegarde quotidienne |
-| Compromission compte admin | Révocation SSH key + rotation des mots de passe | Activation MFA via Tailscale |
-| Crash système | Boot sur live USB + restauration Restic | Tester images VM sur Proxmox Backup |
+| Scénario | Action immédiate | Suivi |
+|-----------|------------------|--------|
+| Panne disque (ZFS) | Restaurer depuis Restic | Remplacer le disque, resync pool |
+| Corruption config Docker | Restauration Restic + snapshot | Automatiser dump `appdata` |
+| Compromission VM-EXTRANET | Isolation réseau + rotation certs + recréation VM | Réexécution Playbook NPM/OpenVPN |
+| Crash INTRANET | Boot sur live + Restic restore | Tester images VM Proxmox |
 
 ---
 
-## 🗝️ 8. Règles d’or de sécurité (résumé)
+## 🗝️ 8. Règles d’or de sécurité
 
-✅ Ne jamais exposer Jellyfin ou Immich directement sur Internet.  
-✅ Toujours passer par **Traefik HTTPS** ou **VPN Tailscale**.  
-✅ Vérifier mensuellement la restauration Restic.  
-✅ Utiliser uniquement des **mots de passe forts** (> 12 caractères, alphanumériques + symboles).  
-✅ Mettre à jour les conteneurs régulièrement (Watchtower).  
-✅ Conserver au moins **2 copies de chaque sauvegarde** (locale + externe).
+✅ Ne jamais exposer directement Jellyfin ou Immich.  
+✅ Passer uniquement via **Nginx Proxy Manager (HTTPS)** ou **VPN OpenVPN**.  
+✅ Restaurer périodiquement les backups Restic.  
+✅ Utiliser uniquement des **mots de passe forts** (> 12 caractères).  
+✅ Vérifier régulièrement la validité des certificats et clés VPN.  
+✅ Maintenir **au moins deux copies** de chaque sauvegarde (locale + externe).
 
 ---
 
 ## 🔮 Actions suivantes
 
-- [ ] Documenter la création du réseau Tailscale dans `/infra/vm/services-ubuntu.md`.  
-- [ ] Ajouter un tableau “Ports ouverts & justification” dans `/docs/ARCHITECTURE.md`.  
-- [ ] Vérifier les permissions du dossier `/mnt/tank/backups`.  
-- [ ] Mettre à jour `/scripts/healthcheck.sh` pour vérifier l’état des sauvegardes et certificats.  
+- [ ] Vérifier les permissions sur `/mnt/tank/backups`.  
+- [ ] Mettre à jour `/infra/proxmox/README.md` (firewall + bridges).  
 
 ---
 
-🗓️ **Journal de bord Future desicion** 
-- Document : *SECURITY.md* finalisé.  
-- Couverture : accès, VPN, chiffrement, sauvegardes, durcissement.  
-- Étape suivante : finaliser **ARCHITECTURE.md** (schéma global + flux réseau + ports exposés).
-
-
-
-💡 Résumé pour ton Wiki
-
-Politique de sécurité (SECURITY.md)
-SSH par clé, accès admin restreint
-HTTPS obligatoire (Traefik)
-Sauvegardes chiffrées (Restic AES-256)
-Accès distant via Tailscale uniquement
-Snapshots ZFS automatiques + audit mensuel
+🗓️ **Journal de bord — 03/11/2025**  
+- Mise à jour : architecture multi-VM (Intranet / Extranet).  
+- VPN : passage à **OpenVPN** (remplace Tailscale).  
+- Proxy : **Nginx Proxy Manager** remplace Traefik.  
+- Politique de flux inter-VM ajoutée.  
+- Sauvegardes et supervision adaptées à la segmentation.
