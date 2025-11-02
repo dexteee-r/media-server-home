@@ -102,31 +102,58 @@ Prochaines étapes :
 - Configuration WiFi permanente (post-Ethernet)
 
 
-## **Journal de bord – 02/11/2025**
+## Journal de bord – 02/11/2025
 
-* Mise à jour : VM → Debian 13, VPN → OpenVPN, Reverse Proxy → Nginx Proxy Manager.
-* Impact : ajustement mineur des configurations réseau et des conteneurs Docker.
-* ajout de docker dans la vm debian 
-* ajout de ufw 
-* achat d'un domain elmzn.be chez ovh cloud 
-* mis en place de dns dynamic chez ovh cloud
-* ajout ddclient dans debian  
-* ajout domain intranet.elmzn.be pour le reseaux intra
-* Passage en multi-VM : VM-EXTRANET (NPM, OpenVPN) / VM-INTRANET (Jellyfin, Immich, DB, Monitoring, Backups).
-* Mises à jour : ARCHITECTURE.md, SECURITY.md, infra/proxmox/, infra/vm/, OPERATIONS.md, ADR-005/006 (impacts).
-*Motif : réduire la surface d’attaque, isoler les données, simplifier la restauration.
-*Prochaines actions : mettre à jour les docs listées ci-dessus, puis transmettre le lot à l’IA DEV.
-* **Mise à jour :** passage en **multi-VM** avec **EXTRANET (NPM/OpenVPN)** et * **INTRANET (Jellyfin/Immich/DB/Monitoring/Restic)**.
-* **Actions doc :** `ARCHITECTURE.md` enrichi (schéma + flux), SECURITY/OPERATIONS à aligner, ADR-007/008 ajoutés.
+### 🔧 Mises à jour système & infrastructure
+- Passage des VMs sous **Debian 13**.
+- Installation de **Docker** et **UFW** sur les deux VMs.
+- Configuration du **pare-feu UFW** sur chaque VM avec politiques par défaut (`deny incoming`, `allow outgoing`).
+- **VPN** configuré : **OpenVPN** opérationnel sur la VM-EXTRANET.
+- **Reverse Proxy** remplacé : **Nginx Proxy Manager** (remplace Traefik).
 
-* Création de la VM-INTRANET documentée.
-* Contient les services Jellyfin, Immich, Postgres, Prometheus, Grafana, Restic.
-* Flux entrants limités à la VM-EXTRANET.
-* Sauvegardes quotidiennes Restic et snapshots ZFS automatiques.
+### 🌐 Réseau & DNS
+- Achat du domaine **elmzn.be** chez **OVH Cloud**.
+- Mise en place d’un **DNS dynamique** via **OVH + ddclient** sur Debian.
+- Ajout du sous-domaine : `intranet.elmzn.be` pour le réseau interne (INTRANET).
+- Tests d’accès HTTPS internes validés via NPM.
 
-* Création de la VM-EXTRANET documentée.
-* Contient NPM, OpenVPN, node_exporter, UFW + Fail2ban.
-* Flux restreints vers INTRANET (HTTPS et metrics).
-* Aucune donnée critique locale. Sauvegardes hebdomadaires via Restic (INTRANET).
-  
+### 🧱 Architecture & sécurité
+- Passage officiel en **multi-VM** :
+  - **VM-EXTRANET** : Nginx Proxy Manager, OpenVPN, node_exporter, UFW + Fail2ban.
+  - **VM-INTRANET** : Jellyfin, Immich, Postgres, Prometheus, Grafana, Restic.
+- Objectifs :
+  - Réduire la surface d’attaque.
+  - Isoler les services internes et les données critiques.
+  - Simplifier la restauration et les backups.
+- Pare-feu Proxmox activé sur **Datacenter + VM + Node**.
+- Segmentation documentée entre les réseaux **vmbr0 (LAN)** et **vmbr1 (DMZ)**.
 
+### 📘 Documentation mise à jour
+- **ARCHITECTURE.md** : schéma multi-VM ajouté, flux inter-VM précisés.
+- **SECURITY.md** : Tailscale remplacé par OpenVPN, ajout de la DMZ et flux inter-VM.
+- **OPERATIONS.md** : procédures séparées (INTRANET / EXTRANET), ordres de restauration.
+- **infra/proxmox/** : ajout des bridges et firewall.
+- **infra/vm/** : création de `services-extranet.md` et `services-intranet.md`.
+- **ADR-005** et **ADR-006** : ajout des sections *multi-VM adaptation* et *multi-VM monitoring*.
+- **ADR-007** et **ADR-008** : ajoutés pour documenter la segmentation réseau et le placement des services.
+
+### 🗄️ Sauvegardes & supervision
+- **Restic** configuré sur INTRANET (quotidien) et EXTRANET (hebdo).
+- Snapshots ZFS automatiques activés sur le pool `tank`.
+- Exporters installés : `node_exporter`, `smartctl_exporter`, `cadvisor`.
+- Monitoring multi-VM opérationnel : Prometheus (INTRANET) scrape EXTRANET via port 9100.
+- Dashboards Grafana mis à jour et versionnés dans `/configs/grafana/dashboards/`.
+
+### 🧠 Synthèse
+- **VM-INTRANET** documentée : héberge Jellyfin, Immich, Postgres, Prometheus, Grafana, Restic.  
+  Flux entrants limités à EXTRANET. Sauvegardes quotidiennes.  
+- **VM-EXTRANET** documentée : NPM, OpenVPN, node_exporter, UFW + Fail2ban.  
+  Flux sortants restreints, aucune donnée critique stockée localement.  
+  Sauvegardes hebdomadaires exportées vers INTRANET.
+
+### 📌 Prochaines actions
+- Mettre à jour les configurations DNS publiques et privées (A / CNAME).  
+- Vérifier la restauration Restic par VM.  
+- Créer le premier jeu de dashboards Grafana “Infrastructure Overview”.
+
+---

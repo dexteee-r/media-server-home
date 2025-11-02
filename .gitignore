@@ -41,6 +41,11 @@ node_modules/
 __pycache__/
 .venv/
 
+# IDE
+.vscode/
+.idea/
+*.swp
 
+# moi même 
 photos_config/
  
