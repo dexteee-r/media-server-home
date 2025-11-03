@@ -6,6 +6,7 @@
 [![Proxmox VE](https://img.shields.io/badge/Proxmox-8.4-orange)](https://www.proxmox.com/)
 [![Docker](https://img.shields.io/badge/Docker-27.x-blue)](https://www.docker.com/)
 [![Debian](https://img.shields.io/badge/Debian-13-red)](https://www.debian.org/)
+[![Made with Love](https://img.shields.io/badge/Made%20with-❤️-red)]()
 
 ## ✨ Features
 
