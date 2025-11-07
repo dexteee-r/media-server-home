@@ -157,3 +157,218 @@ Prochaines étapes :
 - Créer le premier jeu de dashboards Grafana “Infrastructure Overview”.
 
 ---
+###🎯 Objectif initial
+Mettre en place **tous les services de l'INTRANET** pour le projet **Media Server Home**.
+
+
+## ✅ Ce qu'on a accompli
+
+### 1. **Compréhension de l'architecture ZFS** 🧠
+- **Question clé :** Pourquoi créer les datasets ZFS sur l'hôte Proxmox ?
+- **Réponse :** 
+  - ZFS a besoin d'accès direct aux disques physiques
+  - Snapshots centralisés
+  - Partage entre VMs
+  - Meilleures performances (ARC cache partagé)
+  - Intégrité maximale (checksums, SMART)
+
+---
+
+### 2. **Création des pools ZFS** 💾
+
+#### Pool HDD (tank-hdd) - 450 GB
+```bash
+✅ Créé sur /dev/sda (HDD 500 GB complet)
+✅ Compression LZ4 activée
+✅ Atime désactivé
+✅ 4 datasets créés :
+   - media (300 GB quota, recordsize=1M)
+   - photos (150 GB quota)
+   - backups (80 GB quota)
+   - logs (20 GB quota)
+```
+
+#### Pool SSD (tank-ssd) - 15 GB
+```bash
+✅ Créé sur volume LVM /dev/pve/zfs-ssd
+✅ Option safe choisie (15 GB au lieu de 120 GB)
+✅ Pas de manipulation risquée du LVM
+✅ 2 datasets créés :
+   - appdata (10 GB quota)
+   - postgres (5 GB quota)
+```
+
+**Pourquoi 15 GB suffit :**
+- Appdata : configs Docker (~5 GB max)
+- Postgres : base Immich (~2-3 GB pour démarrer)
+- Données volumineuses (photos/vidéos) sur HDD
+
+---
+
+### 3. **Création des VMs** 🖥️
+
+#### VM-EXTRANET (ID 101)
+```yaml
+IP: 192.168.1.111
+RAM: 4 GB
+CPU: 2 cores
+Disque: 20 GB
+OS: Debian 13 (Trixie)
+Rôle: DMZ / Porte d'entrée Internet
+```
+
+#### VM-INTRANET (ID 100) - existait déjà
+```yaml
+IP: 192.168.1.101
+RAM: 12 GB
+CPU: 3 cores
+Disque: 32 GB
+OS: Debian 13 (Trixie)
+Rôle: Services privés (Jellyfin, Immich, etc.)
+```
+
+**Décision stratégique :** Créer VM-EXTRANET **AVANT** le pool SSD pour éviter de manipuler LVM deux fois.
+
+---
+
+### 4. **Tentative de bind mounts** ⚠️
+
+**Problème découvert :** Les bind mounts Proxmox (`mp0:`) ne fonctionnent que pour les **conteneurs LXC**, pas pour les **VMs QEMU/KVM**.
+
+```bash
+❌ Tentative : Éditer /etc/pve/qemu-server/100.conf
+❌ Résultat : Montages n'apparaissent pas dans la VM
+✅ Solution : Passer à NFS
+```
+
+---
+
+### 5. **Configuration NFS** 🌐
+
+#### Serveur NFS (Proxmox)
+```bash
+✅ Installation : nfs-kernel-server
+✅ Configuration : /etc/exports
+✅ 6 exports créés :
+   - 5 pour VM-INTRANET (appdata, postgres, media, photos, backups)
+   - 1 pour VM-EXTRANET (logs)
+✅ Service actif et vérifié
+```
+
+#### Client NFS (VM-INTRANET)
+```bash
+✅ Installation : nfs-common
+✅ 5 montages NFS configurés
+✅ Ajout au /etc/fstab pour persistance
+✅ Vérifié après reboot : tous les montages OK
+```
+
+#### Client NFS (VM-EXTRANET)
+```bash
+✅ Installation : nfs-common
+✅ 1 montage NFS configuré (/mnt/logs)
+✅ Ajout au /etc/fstab
+✅ Vérifié après reboot : montage OK
+```
+
+---
+
+## 📊 Architecture finale validée
+
+```
+╔═══════════════════════════════════════════════════════════════╗
+║ PROXMOX VE 8.4 (192.168.1.100)                               ║
+║                                                               ║
+║ STOCKAGE ZFS                                                  ║
+║ ├─ tank-ssd (15 GB) - SSD NVMe                              ║
+║ │  ├─ appdata  (10 GB)  → NFS → VM-INTRANET                 ║
+║ │  └─ postgres (5 GB)   → NFS → VM-INTRANET                 ║
+║ └─ tank-hdd (450 GB) - HDD                                  ║
+║    ├─ media    (300 GB) → NFS → VM-INTRANET                 ║
+║    ├─ photos   (150 GB) → NFS → VM-INTRANET                 ║
+║    ├─ backups  (80 GB)  → NFS → VM-INTRANET                 ║
+║    └─ logs     (20 GB)  → NFS → VM-EXTRANET                 ║
+║                                                               ║
+║ VMS                                                           ║
+║ ├─ VM-EXTRANET (192.168.1.111) - 4 GB RAM, 2 vCPU           ║
+║ │  └─ /mnt/logs (NFS) ✅                                      ║
+║ └─ VM-INTRANET (192.168.1.101) - 12 GB RAM, 3 vCPU          ║
+║    ├─ /mnt/appdata  (NFS) ✅                                  ║
+║    ├─ /mnt/postgres (NFS) ✅                                  ║
+║    ├─ /mnt/media    (NFS) ✅                                  ║
+║    ├─ /mnt/photos   (NFS) ✅                                  ║
+║    └─ /mnt/backups  (NFS) ✅                                  ║
+╚═══════════════════════════════════════════════════════════════╝
+```
+
+---
+
+## 🎯 État actuel
+
+```
+✅ Infrastructure Proxmox opérationnelle
+✅ Pools ZFS créés et optimisés
+✅ 2 VMs créées et configurées
+✅ NFS configuré et persistant
+✅ Tous les montages testés et validés après reboot
+✅ Docker déjà installé dans VM-INTRANET
+```
+
+---
+
+## 🚀 Prochaines étapes : DÉPLOIEMENT DES SERVICES
+
+### VM-INTRANET
+```yaml
+Services à déployer :
+- Jellyfin (streaming vidéo/musique)
+- Immich (gestion photos + app mobile)
+- PostgreSQL (DB Immich)
+- Redis (cache Immich)
+- Prometheus (monitoring)
+- Grafana (dashboards)
+- node_exporter (métriques système)
+```
+
+### VM-EXTRANET
+```yaml
+Services à déployer :
+- Nginx Proxy Manager (reverse proxy HTTPS)
+- OpenVPN (VPN accès distant)
+- ddclient (DNS dynamique OVH)
+- Fail2ban (protection bruteforce)
+- UFW (firewall)
+- node_exporter (métriques système)
+```
+
+---
+
+## 💡 Décisions techniques clés prises
+
+| Décision | Choix | Raison |
+|----------|-------|--------|
+| **Ordre de création** | VMs → Pools ZFS | Éviter double manipulation LVM |
+| **Taille pool SSD** | 15 GB (safe) | Pas de réduction LVM risquée |
+| **Montage datasets** | NFS (pas bind mount) | Bind mounts = LXC only |
+| **Persistance** | /etc/fstab | Montages auto après reboot |
+| **Sécurité NFS** | no_root_squash | Accès complet depuis VMs |
+
+---
+
+## 📈 Temps estimé restant
+
+```
+✅ Infrastructure : 100% DONE
+🔧 Déploiement services : ~1-2h
+🔒 Sécurisation : ~30min
+🧪 Tests & validation : ~30min
+📝 Documentation finale : ~30min
+```
+
+---
+
+## 🎉 Résumé en une phrase
+
+**On a construit une infrastructure Proxmox + ZFS + NFS solide avec 2 VMs (EXTRANET + INTRANET), prête à accueillir tous les services Docker du Media Server !** 🚀
+
+
