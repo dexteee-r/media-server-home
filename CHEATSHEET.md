@@ -897,3 +897,165 @@ alias vms='qm list'
 alias diskspace='df -h | grep -E "Filesystem|/$"'
 alias meminfo='free -h'
 ```
+
+## ZFS (Proxmox)
+
+### Lister les pools et datasets
+```bash
+zfs list
+zfs list -o name,quota,used,avail tank-hdd
+zfs list -o name,quota,used,avail tank-ssd
+```
+
+### Gérer les quotas
+```bash
+# Voir quota
+zfs get quota tank-hdd/photos
+
+# Définir quota
+zfs set quota=150G tank-hdd/photos
+
+# Supprimer quota
+zfs set quota=none tank-hdd/photos
+```
+
+### Snapshots
+```bash
+# Créer snapshot
+zfs snapshot tank-hdd/photos@backup-20251111
+
+# Lister snapshots
+zfs list -t snapshot
+
+# Restaurer snapshot
+zfs rollback tank-hdd/photos@backup-20251111
+
+# Supprimer snapshot
+zfs destroy tank-hdd/photos@backup-20251111
+```
+
+## NFS
+
+### Proxmox (serveur NFS)
+```bash
+# Voir exports actifs
+showmount -e localhost
+
+# Voir clients connectés
+showmount -a
+
+# Recharger exports
+exportfs -ra
+
+# Éditer exports
+nano /etc/exports
+```
+
+### VMs (client NFS)
+```bash
+# Lister exports serveur
+showmount -e 192.168.1.100
+
+# Monter manuellement
+mount -t nfs 192.168.1.100:/tank-ssd/appdata /mnt/appdata
+
+# Démonter
+umount /mnt/appdata
+
+# Remonter tous les fstab
+mount -a
+
+# Voir montages NFS
+df -h | grep 192.168.1.100
+mount | grep nfs
+```
+
+## Docker VM-INTRANET
+
+### Commandes de base
+```bash
+cd /opt/intranet
+
+# Voir statut
+docker compose ps
+
+# Démarrer tous les services
+docker compose up -d
+
+# Arrêter tous les services
+docker compose down
+
+# Redémarrer un service
+docker compose restart jellyfin
+
+# Voir logs
+docker compose logs -f
+docker compose logs jellyfin --tail 50
+
+# Rebuild un service
+docker compose up -d --force-recreate jellyfin
+
+# Supprimer tout et recréer
+docker compose down
+docker compose up -d
+```
+
+### Gestion conteneurs
+```bash
+# Entrer dans un conteneur
+docker exec -it immich-server sh
+
+# Voir ressources utilisées
+docker stats
+
+# Nettoyer images inutilisées
+docker system prune -a
+```
+
+## VMs
+
+### SSH
+```bash
+# VM-INTRANET
+ssh intraadmin@192.168.1.101
+
+# VM-EXTRANET
+ssh extraadmin@192.168.1.111
+
+# Proxmox
+ssh root@192.168.1.100
+```
+
+### Gestion VMs depuis Proxmox
+```bash
+# Lister VMs
+qm list
+
+# Démarrer VM
+qm start 100  # VM-INTRANET
+qm start 101  # VM-EXTRANET
+
+# Arrêter VM
+qm shutdown 100
+
+# Forcer arrêt
+qm stop 100
+
+# Status
+qm status 100
+```
+
+## Services (URLs)
+
+### VM-INTRANET (192.168.1.101)
+```
+Jellyfin:    http://192.168.1.101:8096
+Immich:      http://192.168.1.101:2283
+Grafana:     http://192.168.1.101:3000
+Prometheus:  http://192.168.1.101:9090
+NPM:         http://192.168.1.101:81
+```
+
+### Proxmox
+```
+Web UI:      https://192.168.1.100:8006
