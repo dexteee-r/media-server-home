@@ -1,4 +1,0 @@
-VM principale : debian
-vpn : open vpn 
-Reverse Proxy : npm (Nginx proxy manager) mais à voir pour Traefik
-true nas à installe dans la VM dans la vm et puis connecté les  min 2diquesx2T

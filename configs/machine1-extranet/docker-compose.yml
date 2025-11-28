@@ -1,0 +1,156 @@
+# Docker Compose Stack - Machine #1 EXTRANET
+
+version: '3.8'
+
+# =============================================================================
+# SERVICES EXTRANET (DMZ)
+# Machine #1 : Dell OptiPlex 7040 (i5-6500, 16 GB RAM)
+# Rôle : Exposition Internet UNIQUEMENT
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # Nginx Proxy Manager - Reverse Proxy + Let's Encrypt
+  # ---------------------------------------------------------------------------
+  nginx-proxy-manager:
+    image: jc21/nginx-proxy-manager:latest
+    container_name: nginx-proxy-manager
+    restart: unless-stopped
+    ports:
+      - "80:80"      # HTTP
+      - "443:443"    # HTTPS
+      - "81:81"      # Admin dashboard (LAN only)
+    volumes:
+      - ./nginx-proxy-manager/data:/data
+      - ./nginx-proxy-manager/letsencrypt:/etc/letsencrypt
+    environment:
+      # Database settings (if external DB needed)
+      # DB_SQLITE_FILE: "/data/database.sqlite"
+      DISABLE_IPV6: "true"
+    networks:
+      - extranet
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  # ---------------------------------------------------------------------------
+  # Node Exporter - Prometheus Metrics
+  # ---------------------------------------------------------------------------
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node-exporter
+    restart: unless-stopped
+    ports:
+      - "9100:9100"
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/rootfs'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    networks:
+      - extranet
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  # ---------------------------------------------------------------------------
+  # Fail2ban - Protection Bruteforce (optionnel si systemd service préféré)
+  # ---------------------------------------------------------------------------
+  # fail2ban:
+  #   image: crazymax/fail2ban:latest
+  #   container_name: fail2ban
+  #   restart: unless-stopped
+  #   network_mode: host
+  #   cap_add:
+  #     - NET_ADMIN
+  #     - NET_RAW
+  #   volumes:
+  #     - ./fail2ban/data:/data
+  #     - ./nginx-proxy-manager/data/logs:/var/log/npm:ro
+  #   environment:
+  #     - TZ=Europe/Brussels
+  #     - F2B_LOG_LEVEL=INFO
+  #     - F2B_DB_PURGE_AGE=30d
+
+  # ---------------------------------------------------------------------------
+  # Uptime Kuma - Monitoring Uptime (optionnel)
+  # ---------------------------------------------------------------------------
+  uptime-kuma:
+    image: louislam/uptime-kuma:latest
+    container_name: uptime-kuma
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./uptime-kuma/data:/app/data
+    networks:
+      - extranet
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  # ---------------------------------------------------------------------------
+  # Watchtower - Auto-update containers (optionnel)
+  # ---------------------------------------------------------------------------
+  # watchtower:
+  #   image: containrrr/watchtower:latest
+  #   container_name: watchtower
+  #   restart: unless-stopped
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock
+  #   environment:
+  #     - WATCHTOWER_CLEANUP=true
+  #     - WATCHTOWER_SCHEDULE=0 0 4 * * *  # 4h du matin chaque jour
+  #     - WATCHTOWER_LABEL_ENABLE=true
+
+# =============================================================================
+# NETWORKS
+# =============================================================================
+
+networks:
+  extranet:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.18.0.0/16
+
+# =============================================================================
+# VOLUMES (si besoin volumes nommés)
+# =============================================================================
+
+# volumes:
+#   npm-data:
+#   npm-letsencrypt:
+#   uptime-kuma-data:
+
+# =============================================================================
+# NOTES D'UTILISATION
+# =============================================================================
+
+# Démarrer stack :
+#   docker-compose up -d
+
+# Voir logs :
+#   docker-compose logs -f nginx-proxy-manager
+#   docker-compose logs -f uptime-kuma
+
+# Arrêter stack :
+#   docker-compose down
+
+# Mettre à jour images :
+#   docker-compose pull
+#   docker-compose up -d
+
+# Accès Web UI :
+#   - Nginx Proxy Manager : http://192.168.1.111:81
+#     Default credentials : admin@example.com / changeme
+#   - Uptime Kuma : http://192.168.1.111:3001
+#   - Node Exporter : http://192.168.1.111:9100/metrics
+
+# Services NON-Docker (systemd) :
+#   - OpenVPN Access Server : systemctl status openvpn@server
+#   - ddclient (DNS dynamique) : systemctl status ddclient
+#   - Fail2ban : systemctl status fail2ban
+#   - UFW firewall : ufw status verbose

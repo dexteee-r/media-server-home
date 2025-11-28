@@ -1,370 +1,359 @@
-# 🏠 Media Server Home
+# 🏠 Media Server Home - Infrastructure Homelab
 
-> Complete homelab with media services, web hosting, VPN, and password manager. Proxmox + ZFS + Docker infrastructure.
+[![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Proxmox](https://img.shields.io/badge/Proxmox-VE_8.4-orange)](https://www.proxmox.com/)
+[![Debian](https://img.shields.io/badge/Debian-13_Trixie-red)](https://www.debian.org/)
+[![Docker](https://img.shields.io/badge/Docker-Compose-blue)](https://docs.docker.com/compose/)
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Proxmox VE](https://img.shields.io/badge/Proxmox-8.4-orange)](https://www.proxmox.com/)
-[![Docker](https://img.shields.io/badge/Docker-27.x-blue)](https://www.docker.com/)
-[![Debian](https://img.shields.io/badge/Debian-13-red)](https://www.debian.org/)
-[![Made with Love](https://img.shields.io/badge/Made%20with-❤️-red)]()
-
-## ✨ Features
-
-### 🎬 Media Streaming
-- **Jellyfin** - Movies, TV shows, music streaming with hardware transcoding (Intel QuickSync)
-- **Immich** - Self-hosted Google Photos alternative with AI features
-
-### 🔐 Security & Access
-- **Nginx Proxy Manager** - Reverse proxy with automatic HTTPS (Let's Encrypt)
-- **OpenVPN/WireGuard** - Secure remote access to entire homelab
-- **Vaultwarden** - Self-hosted password manager (Bitwarden compatible)
-- **TinyAuth** - Lightweight authentication for NPM
-- **UFW + Fail2ban** - Multi-layer firewall protection
-- **Multi-VM isolation** - Separate EXTRANET (DMZ) and INTRANET VMs
-
-### 🌐 Web Hosting
-- **Nginx Web Server** - Host personal websites and projects
-- **MariaDB** - Database backend for web applications
-- **PHPMyAdmin** - Web-based database management
-
-### 📊 Monitoring & Backups
-- **Prometheus + Grafana** - Real-time metrics and dashboards
-- **Restic** - Encrypted automated backups (AES-256)
-- **ZFS + NFS** - Data integrity with snapshots, centralized storage
-
-### 🌐 Infrastructure
-- **Proxmox VE 8.4** - Bare-metal hypervisor with GPU passthrough
-- **Debian 13** - Lightweight and stable guest OS
-- **ZFS + NFS** - Shared storage across VMs
-- **Dynamic DNS** - OVH domain (elmzn.be) with ddclient
+> **Infrastructure de production 24/7** pour auto-hébergement de services familiaux et laboratoire d'apprentissage système/réseau.
 
 ---
 
-## 🗺️ Architecture
-```
-┌───────────────────────────────────────────────────┐
-│ Proxmox VE 8.4 (Dell OptiPlex 7040)                │
-│ i5-6500 | 16GB RAM | 256GB SSD + 500GB HDD         │
-│                                                     │
-│ Storage (ZFS + NFS)                                 │
-│ ├─ tank-ssd (15 GB)  → appdata, postgres          │
-│ └─ tank-hdd (450 GB) → media, photos, backups     │
-├───────────────────────────────────────────────────┤
-│                                                     │
-│  ┌──────────────────────┐   ┌──────────────────┐  │
-│  │ VM-EXTRANET (DMZ)    │   │ VM-INTRANET (LAN)│  │
-│  │ 192.168.1.111        │   │ 192.168.1.101    │  │
-│  │ Debian 13 | 4GB RAM  │   │ Debian 13 | 12GB │  │
-│  ├──────────────────────┤   ├──────────────────┤  │
-│  │ • NPM (80/443)       │◄──┤ • Jellyfin :8096 │  │
-│  │ • OpenVPN (1194)     │   │ • Immich :2283   │  │
-│  │ • Vaultwarden :8080  │   │ • Postgres :5432 │  │
-│  │ • TinyAuth           │   │ • Prometheus     │  │
-│  │ • ddclient (DDNS)    │   │ • Grafana :3000  │  │
-│  │ • Fail2ban           │   │ • Nginx Web :8081│  │
-│  │ • UFW firewall       │   │ • MariaDB :3306  │  │
-│  │ • NFS: /mnt/logs     │   │ • Restic backups │  │
-│  └──────────────────────┘   │ • NFS: 5 mounts  │  │
-│         ▲                    └──────────────────┘  │
-│         │                           ▲              │
-│    Port forward              GPU passthrough       │
-│    80/443/1194               Intel HD 530          │
-└───────────────────────────────────────────────────┘
-         ▲
-         │
-   Internet (elmzn.be)
-```
+## 📊 Vue d'Ensemble
 
-**Security model:**
-- ✅ INTRANET **NEVER** exposed to Internet
-- ✅ All public traffic → EXTRANET (NPM reverse proxy)
-- ✅ VPN access for remote management
-- ✅ Multi-layer firewall (UFW per VM + Proxmox)
-- ✅ Vaultwarden accessible only via VPN
+**Type :** Homelab 2 machines (EXTRANET/INTRANET séparés)  
+**Objectif :** Stockage photos/fichiers famille + VMs laboratoire + apprentissage DevOps  
+**Stack :** Proxmox VE + Debian + Docker Compose + ZFS  
+**Sécurité :** Architecture DMZ multi-couches
+
+### 🎯 Cas d'Usage Principaux
+
+- ✅ **Stockage photos famille** (Immich) - 4 TB disponible
+- ✅ **Partage fichiers** (Nextcloud) - accès web + mobile
+- ✅ **VMs laboratoire** (Ubuntu/Debian/Windows) - apprentissage
+- ✅ **Monitoring** (Prometheus + Grafana)
+- ✅ **Accès distant sécurisé** (OpenVPN)
+- ✅ **Backups automatisés** (Restic chiffré)
 
 ---
 
-## 📊 Project Status - Updated November 11, 2025
+## 🏗️ Architecture
 
-### ✅ Deployed and Operational
-- [x] **Infrastructure**
-  - Proxmox VE 8.4 configured (bare-metal)
-  - ZFS pools: tank-ssd (15 GB), tank-hdd (450 GB)
-  - NFS server: 6 exports active
-  - GPU passthrough: Intel HD 530 working
-  
-- [x] **VM-INTRANET** (192.168.1.101) - 10 Docker containers
-  - Jellyfin (streaming + hardware transcoding)
-  - Immich (photo management + mobile app)
-  - PostgreSQL 16 (Immich database)
-  - Redis (Immich cache)
-  - Prometheus (metrics collection)
-  - Grafana (monitoring dashboards)
-  - Node Exporter (system metrics)
-  - Nginx Proxy Manager (existing, internal use)
-  
-- [x] **VM-EXTRANET** (192.168.1.111) - Created, ready for deployment
+### **Vue d'Ensemble**
 
-### 🔧 In Progress (Next Session)
-- [ ] **VM-EXTRANET Services**
-  - Docker installation
-  - Nginx Proxy Manager (public-facing)
-  - OpenVPN or WireGuard (VPN access)
-  - Vaultwarden (password manager)
-  - TinyAuth (authentication layer)
-  - Fail2ban + UFW (security hardening)
-  
-- [ ] **Web Hosting (VM-INTRANET)**
-  - Nginx web server deployment
-  - MariaDB for web applications
-  - Reverse proxy configuration (EXTRANET → INTRANET)
-  - Personal websites deployment
+```
+Internet (WAN)
+    ↓
+Box Internet (192.168.1.1)
+├─ Port forwarding :
+│  ├─ 80/443 → Machine #1
+│  └─ 1194/udp → Machine #1
+│
+└─ LAN (192.168.1.0/24)
+   │
+   ├─ Machine #1 : EXTRANET (DMZ)
+   │  ├─ IP : 192.168.1.111
+   │  ├─ Rôle : Exposition Internet UNIQUEMENT
+   │  ├─ Hardware : Dell OptiPlex 7040 (i5-6500, 16GB RAM)
+   │  └─ Services : NPM, OpenVPN, Fail2ban
+   │
+   └─ Machine #2 : INTRANET (Privé)
+      ├─ IP : 192.168.1.101
+      ├─ Rôle : Stockage + Services + VMs Lab
+      ├─ Hardware : Custom PC (i7-6700, 16GB RAM, GTX 980, 4TB HDD)
+      └─ Services : Immich, Nextcloud, VMs dev
+```
 
-### 📅 Planned Improvements (3-6 months)
-- [ ] **Storage Upgrade**
-  - Replace 500GB HDD with 2x HDD (mirror) + backup disk
-  - ZFS quotas implementation (after hardware upgrade)
-  - Expand to 2-4 TB total capacity
-  
-- [ ] **Infrastructure**
-  - RAM upgrade (16GB → 24-32GB) for dual channel + Immich ML
-  - Split DNS (Pi-hole LXC)
-  - Advanced monitoring (alerting rules)
-  - Automated testing suite
+### **Séparation de Sécurité**
 
-### 🎯 Services Access (Current)
+```mermaid
+graph TB
+    A[Internet] -->|Ports 80/443/1194| B[Machine #1 EXTRANET]
+    B -->|Reverse Proxy| C[Machine #2 INTRANET]
+    D[LAN Devices] -->|Accès Direct| C
+    C -->|Backups| B
+    
+    style B fill:#ff6b6b,color:#fff
+    style C fill:#4ecdc4,color:#fff
+    style A fill:#95a5a6,color:#fff
+    style D fill:#f39c12,color:#fff
+```
 
-**LAN Access (192.168.1.0/24):**
-| Service | URL | Status |
-|---------|-----|--------|
-| Jellyfin | http://192.168.1.101:8096 | ✅ Operational |
-| Immich | http://192.168.1.101:2283 | ✅ Operational |
-| Grafana | http://192.168.1.101:3000 | ✅ Operational |
-| Prometheus | http://192.168.1.101:9090 | ✅ Operational |
-| Proxmox | https://192.168.1.100:8006 | ✅ Operational |
+**Principe :** Machine #2 **JAMAIS** exposée directement à Internet.
 
-**Internet Access (Coming Soon):**
-| Service | URL | Status |
-|---------|-----|--------|
-| Jellyfin | https://media.elmzn.be | 📋 Planned |
-| Immich | https://photos.elmzn.be | 📋 Planned |
-| Vaultwarden | https://vault.elmzn.be | 📋 Planned (VPN only) |
-| Web Sites | https://site1.elmzn.be | 📋 Planned |
+---
+
+## 🖥️ Matériel
+
+### **Machine #1 : EXTRANET (Dell OptiPlex 7040)**
+
+| Composant | Specs |
+|-----------|-------|
+| **CPU** | Intel Core i5-6500 (4C/4T @ 3.2-3.6 GHz) |
+| **RAM** | 16 GB DDR4-2133 (dual channel) |
+| **SSD** | Samsung NVMe 256 GB (Proxmox + VMs) |
+| **HDD** | 500 GB SATA (backups Machine #2) |
+| **GPU** | Intel HD 530 (iGPU) |
+| **Réseau** | Gigabit Ethernet |
+| **Alim** | 240W OEM |
+
+### **Machine #2 : INTRANET (Custom Build)**
+
+| Composant | Specs |
+|-----------|-------|
+| **CPU** | Intel Core i7-6700 (4C/**8T** @ 3.4-4.0 GHz) |
+| **RAM** | 16 GB DDR4-2133 (dual channel) |
+| **SSD** | Crucial MX500 500 GB (Proxmox + VMs) |
+| **HDD** | 4 TB SATA NAS-rated (photos/fichiers) |
+| **GPU** | NVIDIA GeForce GTX 980 (4 GB GDDR5) |
+| **Réseau** | Gigabit Ethernet |
+| **Alim** | 500W+ (requis pour GTX 980) |
+
+---
+
+## 🐳 Services Déployés
+
+### **Machine #1 : EXTRANET**
+
+| Service | Port | Description |
+|---------|------|-------------|
+| **Nginx Proxy Manager** | 80/443 | Reverse proxy + Let's Encrypt |
+| **OpenVPN** | 1194/udp | Accès distant VPN |
+| **ddclient** | - | DNS dynamique OVH |
+| **Fail2ban** | - | Protection bruteforce |
+| **node-exporter** | 9100 | Métriques Prometheus |
+
+### **Machine #2 : INTRANET**
+
+| Service | Port | Description |
+|---------|------|-------------|
+| **Immich** | 2283 | Gestion photos famille (4 TB) |
+| **Nextcloud** | 8080 | Partage fichiers + sync |
+| **PostgreSQL** | 5432 | Base de données |
+| **Redis** | 6379 | Cache |
+| **Prometheus** | 9090 | Collecte métriques |
+| **Grafana** | 3000 | Dashboards monitoring |
+| **VM-DEV-LINUX** | - | Laboratoire Ubuntu/Debian |
+| **VM-DEV-WINDOWS** | - | Laboratoire Windows 10/11 |
 
 ---
 
 ## 🚀 Quick Start
 
-### Prerequisites
-- Proxmox VE 8.x installed
-- 16GB+ RAM recommended
-- Domain name (optional, for HTTPS)
+### **Prérequis**
 
-### 1. Clone repository
+- 2 machines physiques (specs ci-dessus)
+- Disque 4 TB NAS-rated pour Machine #2
+- Domaine public (ex: `elmzn.be` via OVH)
+- Accès SSH aux 2 machines
+- Connaissances Linux de base
+
+### **Installation Rapide**
+
 ```bash
-git clone https://github.com/dexteee-r/media-server-home.git
+# 1. Cloner le repo
+git clone https://github.com/TON_USER/media-server-home.git
 cd media-server-home
+
+# 2. Suivre les guides d'installation
+# - docs/SETUP-MACHINE1.md (EXTRANET)
+# - docs/SETUP-MACHINE2.md (INTRANET)
+
+# 3. Déployer services
+cd configs/machine1-extranet
+docker-compose up -d
+
+cd configs/machine2-intranet
+docker-compose up -d
 ```
 
-### 2. Review architecture
+---
+
+## 📖 Documentation
+
+### **Guides d'Installation**
+
+- 🚀 [**SETUP-MACHINE1.md**](docs/SETUP-MACHINE1.md) - Configuration EXTRANET (DMZ)
+- 🚀 [**SETUP-MACHINE2.md**](docs/SETUP-MACHINE2.md) - Configuration INTRANET (Stockage + VMs)
+- 🔄 [**MIGRATION-GUIDE.md**](docs/MIGRATION-GUIDE.md) - Migration depuis architecture 1 machine
+
+### **Documentation Technique**
+
+- 📐 [**ARCHITECTURE.md**](docs/ARCHITECTURE.md) - Architecture détaillée + schémas
+- 🔒 [**SECURITY.md**](docs/SECURITY.md) - Politique sécurité multi-couches
+- 📊 [**OPERATIONS.md**](docs/OPERATIONS.md) - Runbooks maintenance
+- 📝 [**ADR/**](docs/ADR/) - Architecture Decision Records
+
+### **Opérations Courantes**
+
 ```bash
-# Read documentation
-cat docs/ADR/008-architecture-multi-vm.md
-cat docs/ADR/011-zfs-nfs-partage-stockage.md
-cat SETUP.md  # Full installation guide
+# Démarrer/Arrêter services
+docker-compose up -d    # Démarrer
+docker-compose down     # Arrêter
+docker-compose logs -f  # Voir logs
+
+# Backups
+./scripts/backup-m2-to-m1.sh  # Backup Machine #2 → Machine #1
+
+# VMs laboratoire (Machine #2)
+qm start 201   # Démarrer VM-DEV-LINUX
+qm stop 201    # Arrêter VM-DEV-LINUX
+qm start 202   # Démarrer VM-DEV-WINDOWS
 ```
 
-### 3. Deploy infrastructure
+---
+
+## 🔒 Sécurité
+
+### **Architecture Defense in Depth (6 couches)**
+
+1. **Box Firewall** - Ports 80/443/1194 UNIQUEMENT vers Machine #1
+2. **Proxmox Firewall** - Règles datacenter + VM + node
+3. **UFW Machine #1** - Allow public ports, proxy vers Machine #2
+4. **UFW Machine #2** - Allow depuis Machine #1 + LAN ONLY, deny Internet
+5. **Fail2ban** - Auto-ban bruteforce (3 tentatives = ban 1h)
+6. **Application Auth** - Comptes utilisateurs + 2FA (recommandé)
+
+### **Principe Zéro Trust**
+
+- ❌ Machine #2 **JAMAIS** exposée directement Internet
+- ✅ Accès externe via reverse proxy (Machine #1) ou VPN uniquement
+- ✅ Monitoring actif (Uptime Kuma + Grafana alerting)
+
+---
+
+## 💾 Backups
+
+### **Stratégie 3-2-1**
+
+```
+3 Copies des données :
+├─ Machine #2 (production) : 4 TB HDD
+├─ Machine #1 (backup local) : 500 GB HDD
+└─ Cloud offsite (futur) : Backblaze B2
+
+2 Types de médias :
+├─ SSD (configs, VMs)
+└─ HDD (photos, fichiers)
+
+1 Copie hors-site :
+└─ Cloud chiffré (à implémenter)
+```
+
+### **Automatisation**
+
+- **Quotidien** : Configs Docker, base de données PostgreSQL
+- **Hebdomadaire** : Photos Immich (incrémental)
+- **Mensuel** : Fichiers Nextcloud complets
+- **Rétention** : 7 daily, 4 weekly, 6 monthly
+
 ```bash
-# Create ZFS pools on Proxmox
-# Configure NFS server
-# Create VMs (EXTRANET + INTRANET)
-# See SETUP.md Phase 1-10 for detailed steps
+# Restaurer backup
+restic restore latest --target /restore --tag photos
 ```
 
-### 4. Deploy services
-```bash
-# VM-EXTRANET
-cd /opt/extranet
-docker compose up -d
+---
 
-# VM-INTRANET
-cd /opt/intranet
-docker compose up -d
-```
+## 📊 Monitoring
 
-### 5. Access services
-- **Jellyfin:** http://192.168.1.101:8096 (LAN) or https://media.elmzn.be (Internet)
-- **Immich:** http://192.168.1.101:2283 (LAN) or https://photos.elmzn.be (Internet)
-- **Grafana:** http://192.168.1.101:3000 (LAN)
-- **Vaultwarden:** https://vault.elmzn.be (VPN only)
+### **Dashboards Grafana**
+
+- **Node Exporter Full** (CPU, RAM, Disk, Network)
+- **Docker Monitoring** (Containers, Images, Volumes)
+- **ZFS Metrics** (Pool health, I/O stats)
+- **Custom Dashboard** (Services uptime, response times)
+
+### **Alerting**
+
+- Disk usage > 80%
+- Service down > 5 min
+- RAM usage > 90%
+- Backup failed
 
 ---
 
-## 📚 Documentation
+## 🎯 Décisions Techniques Clés (ADR)
 
-### Essential docs (read first)
-- [**SETUP.md**](SETUP.md) - Complete installation guide (10 phases)
-- [**CHEATSHEET.md**](CHEATSHEET.md) - Common commands reference (ZFS, NFS, Docker)
-- [**Architecture Diagram**](assets/architecture-proxmox.png) - Visual overview
-- [**Journal de Bord**](docs/journal/journal_de_bord.md) - Development log
+| # | Décision | Choix | Raison |
+|---|----------|-------|--------|
+| 011 | Architecture | **2 machines séparées** | Sécurité + performance + apprentissage |
+| 012 | Séparation | **EXTRANET/INTRANET** | Isolation DMZ, réduction surface d'attaque |
+| 013 | Stockage | **ZFS sur 4 TB HDD** | Intégrité données, snapshots, quotas |
+| 014 | VMs Lab | **On-demand** | Économise RAM (16 GB limité Machine #2) |
+| 015 | Backups | **Restic M2→M1** | Chiffré, incrémental, efficace |
 
-### Architecture Decision Records (ADR)
-All technical decisions are documented:
-
-| ADR | Topic | Status |
-|-----|-------|--------|
-| [001](docs/ADR/001-hyperviseur-proxmox.md) | Hypervisor choice (Proxmox VE) | ✅ Adopted |
-| [002](docs/ADR/002-docker-vs-lxc.md) | Docker Compose vs LXC | ✅ Adopted |
-| [003](docs/ADR/003-traefik-vs-nginx.md) | NPM vs Traefik | ✅ Adopted |
-| [004](docs/ADR/004-zfs-vs-btrfs.md) | ZFS vs Btrfs | ✅ Adopted |
-| [005](docs/ADR/005-backup-strategy.md) | Restic backup strategy | ✅ Adopted |
-| [006](docs/ADR/006-monitoring-stack.md) | Prometheus + Grafana | ✅ Adopted |
-| [007](docs/ADR/007-strategie-stockage.md) | SSD/HDD storage split | ✅ Adopted |
-| [008](docs/ADR/008-architecture-multi-vm.md) | Multi-VM security architecture | ✅ Adopted |
-| [009](docs/ADR/009-placement-services.md) | Service placement strategy | ✅ Adopted |
-| [010](docs/ADR/010-DNS_public.md) | Dynamic DNS (OVH) | ✅ Adopted |
-| [011](docs/ADR/011-zfs-nfs-partage-stockage.md) | ZFS + NFS storage sharing | ✅ Adopted |
-| [012](docs/ADR/012-pas-de-quotas-zfs-temporaire.md) | No ZFS quotas (temporary) | ⏳ Temporary |
-| [013](docs/ADR/013-tinyauth-authentification.md) | TinyAuth for NPM auth | 📋 Planned |
-
-[📂 See all ADRs →](docs/ADR/)
+Voir [docs/ADR/](docs/ADR/) pour détails complets.
 
 ---
 
-## 🔧 Tech Stack
+## 📈 Roadmap
 
-### Infrastructure
-- **Hypervisor:** Proxmox VE 8.4
-- **Guest OS:** Debian 13 (Trixie)
-- **Orchestration:** Docker Compose
-- **Storage:** ZFS (tank-ssd + tank-hdd) + NFS
-- **Users:** intraadmin (INTRANET), extraadmin (EXTRANET)
+### **Court Terme (0-3 mois)**
 
-### Services
-- **Reverse Proxy:** Nginx Proxy Manager
-- **Authentication:** TinyAuth (planned)
-- **VPN:** OpenVPN or WireGuard (planned)
-- **Password Manager:** Vaultwarden (planned)
-- **Media:** Jellyfin (with Intel QuickSync)
-- **Photos:** Immich + PostgreSQL 16
-- **Web Server:** Nginx (planned)
-- **Database:** MariaDB (planned)
-- **Monitoring:** Prometheus + Grafana
-- **Backups:** Restic (encrypted AES-256)
+- [x] Architecture 2 machines opérationnelle
+- [x] Immich + Nextcloud déployés
+- [x] VMs laboratoire configurées
+- [ ] Backups offsite (Backblaze B2)
+- [ ] Alerting Grafana configuré
+- [ ] Screenshots UI (portfolio)
 
-### Network
-- **DNS:** OVH (elmzn.be) + ddclient (DDNS)
-- **Firewall:** UFW (per VM) + Fail2ban
-- **SSL:** Let's Encrypt (via NPM)
+### **Moyen Terme (3-6 mois)**
+
+- [ ] Upgrade RAM Machine #2 (16 GB → 32 GB) si besoin
+- [ ] Ajout Node #3 (cluster Proxmox HA) - optionnel
+- [ ] Migration Jellyfin (streaming vidéo) si usage famille
+- [ ] Cloudflare Tunnel (alternative OpenVPN)
+
+### **Long Terme (6-12 mois)**
+
+- [ ] Kubernetes (k3s) pour orchestration services
+- [ ] CI/CD pipeline (GitLab Runner auto-hébergé)
+- [ ] Monitoring avancé (Loki + Tempo)
 
 ---
 
-## 🛠️ Hardware
+## 🤝 Contribution
 
-**Dell OptiPlex 7040**
-- **CPU:** Intel Core i5-6500 (4C/4T @ 3.2-3.6 GHz)
-- **RAM:** 16 GB DDR4-2133 (single channel)
-- **Storage:** 
-  - 256 GB NVMe SSD (Proxmox + VMs)
-    - 15 GB ZFS (tank-ssd): appdata + postgres
-  - 500 GB HDD (data)
-    - 450 GB ZFS (tank-hdd): media + photos + backups + logs
-- **GPU:** Intel HD 530 (QuickSync hardware transcoding)
-- **Network:** Intel I219-LM Gigabit Ethernet
+Ce projet est principalement **éducatif** et **personnel**, mais suggestions/questions bienvenues !
 
-**Storage Usage (as of Nov 11, 2025):**
-- tank-ssd: 977M / 15 GB (6.5%)
-- tank-hdd: 505M / 450 GB (0.1%)
-- **Total used:** ~1.5 GB / 465 GB
+### **Comment Contribuer**
+
+1. Fork le projet
+2. Créer branche feature (`git checkout -b feature/amelioration`)
+3. Commit changements (`git commit -m 'Add: nouvelle feature'`)
+4. Push branche (`git push origin feature/amelioration`)
+5. Ouvrir Pull Request
 
 ---
 
-## 🔐 Security
+## 📞 Ressources & Liens
 
-### Defense in depth (6 layers)
-1. **Box firewall** - Only ports 80/443/1194 forwarded to EXTRANET
-2. **Proxmox firewall** - Datacenter + VM + Node rules
-3. **VM-EXTRANET UFW** - Allow public ports only (80/443/1194)
-4. **VM-INTRANET UFW** - Deny all incoming (except from EXTRANET + LAN)
-5. **Fail2ban** - Auto-ban brute force attempts (planned)
-6. **Application auth** - TinyAuth + user accounts + strong passwords
+### **Documentation Officielle**
 
-### Network Isolation
-- **INTRANET:** NEVER exposed to Internet, accessible only from LAN or via VPN
-- **EXTRANET:** DMZ zone, only reverse proxy exposed
-- **Vaultwarden:** Accessible ONLY via VPN (extra security layer)
+- [Proxmox VE](https://pve.proxmox.com/wiki/)
+- [Docker Compose](https://docs.docker.com/compose/)
+- [Immich](https://immich.app/docs/)
+- [Nextcloud](https://docs.nextcloud.com/)
+- [Nginx Proxy Manager](https://nginxproxymanager.com/)
 
-### Backup Strategy
-- **Frequency:** Daily (DB/appdata), Weekly (photos), Monthly (media)
-- **Encryption:** AES-256 (Restic)
-- **Retention:** 7 daily, 4 weekly, 6 monthly
-- **Storage:** Local ZFS snapshots + Restic encrypted backups
+### **Communauté**
+
+- [r/selfhosted](https://reddit.com/r/selfhosted)
+- [r/Proxmox](https://reddit.com/r/Proxmox)
+- [r/homelab](https://reddit.com/r/homelab)
 
 ---
 
-## 💡 Key Technical Decisions
+## 📜 License
 
-### Why ZFS on Proxmox + NFS?
-Instead of creating ZFS pools inside VMs, we centralize storage on the Proxmox host:
-- ✅ **Centralized snapshots:** `zfs snapshot` from Proxmox for all VMs
-- ✅ **SMART monitoring:** Proxmox monitors disk health
-- ✅ **Flexible sharing:** Easy to add new VMs via NFS
-- ✅ **Performance:** Native ZFS + minimal NFS overhead (~5%)
-
-See [ADR 011](docs/ADR/011-zfs-nfs-partage-stockage.md) for full rationale.
-
-### Why no ZFS quotas (for now)?
-Current storage is limited (500 GB) and a hardware upgrade is planned within 3-6 months:
-- 📅 **Upgrade plan:** 2x HDD in mirror + backup disk (2-4 TB total)
-- ⏳ **Temporary:** No quotas until upgrade (flexibility for testing)
-- ✅ **Future:** Quotas will be applied after hardware upgrade
-
-See [ADR 012](docs/ADR/012-pas-de-quotas-zfs-temporaire.md) for details.
-
-### Why TinyAuth instead of Authelia?
-For a personal homelab, TinyAuth provides sufficient security with minimal complexity:
-- ✅ **Lightweight:** Low resource usage (important for 4 GB EXTRANET VM)
-- ✅ **Simple:** Easy to configure and maintain
-- ✅ **Sufficient:** Meets all authentication needs for personal use
-- ❌ **Authelia:** Overkill for homelab (more features than needed)
-
-See [ADR 013](docs/ADR/013-tinyauth-authentification.md) for rationale.
+Ce projet est sous licence **MIT** - voir [LICENSE](LICENSE) pour détails.
 
 ---
 
-## 🤝 Contributing
+## 🙏 Remerciements
 
-This is a personal homelab project, but feel free to:
-- 🐛 Report issues
-- 💡 Suggest improvements
-- 📖 Use as inspiration for your own homelab
-
----
-
-## 📄 License
-
-MIT License - see [LICENSE](LICENSE)
+- Communauté r/selfhosted pour inspiration
+- Projet Immich pour excellent logiciel photos
+- Proxmox team pour hyperviseur open-source
+- Tous les mainteneurs de logiciels open-source utilisés
 
 ---
 
-## 🙏 Acknowledgments
-
-- [Proxmox VE](https://www.proxmox.com/) - Amazing open-source hypervisor
-- [Jellyfin](https://jellyfin.org/) - Free media streaming
-- [Immich](https://immich.app/) - Best self-hosted photo solution
-- [Vaultwarden](https://github.com/dials/vaultwarden) - Lightweight Bitwarden server
-- [r/selfhosted](https://reddit.com/r/selfhosted) - Awesome community
-- **Claude (Anthropic)** - AI assistant for technical architecture and documentation
+**Dernière mise à jour :** 2025-11-28  
+**Version architecture :** 2.0 (2 machines EXTRANET/INTRANET)
 
 ---
 
-## 📞 Contact
-
-**Portfolio:** [Take a look !](https://mm-elmazani.github.io/mm-elmazani-portfolio/index.html)  
-**GitHub:** [@dexteee-r](https://github.com/dexteee-r)  
-**Project:** [media-server-home](https://github.com/dexteee-r/media-server-home)
-
----
-
-*Last updated: November 11, 2025*
+<div align="center">
+  <b>Made with ❤️ for learning and family</b>
+</div>
