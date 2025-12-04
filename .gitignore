@@ -1,0 +1,31 @@
+# Secrets
+.env
+*.env
+!.env.example
+
+# Docker volumes
+npm-data/
+letsencrypt/
+postgres-data/
+grafana-data/
+prometheus-data/
+model-cache/
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# IDE
+.vscode/
+.idea/
+*.code-workspace
+
+# Backups
+*.bak
+*.backup
